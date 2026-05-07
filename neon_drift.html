@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON DRIFT - CARRERAS FUTURISTAS</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+
+        body { margin: 0; overflow: hidden; background-color: #050510; font-family: 'Orbitron', sans-serif; user-select: none; touch-action: none; }
+        canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+        
+        #uiLayer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+            display: flex; flex-direction: column; justify-content: space-between;
+        }
+
+        #startScreen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at center, rgba(10,0,30,0.8) 0%, rgba(0,0,0,1) 100%);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: #fff; pointer-events: auto; z-index: 10;
+        }
+        
+        #startScreen h1 { 
+            font-size: 5rem; margin: 0 0 10px 0; color: #fff; 
+            text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff, 0 0 40px #ff00ff; 
+            font-weight: 900; letter-spacing: 5px; text-transform: uppercase; font-style: italic;
+        }
+        #startScreen p { font-size: 1.2rem; color: #00ffff; margin-bottom: 40px; text-align: center; text-shadow: 0 0 5px #00ffff; letter-spacing: 2px;}
+        
+        .start-btn {
+            padding: 15px 60px; font-size: 1.8rem; font-weight: 900; color: #000;
+            background: #00ffff; border: none; border-radius: 0; cursor: pointer;
+            box-shadow: 0 0 20px #00ffff, inset 0 0 10px #fff; transition: all 0.2s; 
+            text-transform: uppercase; font-family: 'Orbitron', sans-serif; font-style: italic;
+            clip-path: polygon(10% 0, 100% 0, 90% 100%, 0% 100%);
+        }
+        .start-btn:hover { background: #fff; box-shadow: 0 0 40px #00ffff; transform: scale(1.05); }
+
+        .hud { padding: 40px; display: none; pointer-events: none; }
+        .hud-top { display: flex; justify-content: space-between; width: 100%; box-sizing: border-box;}
+        .hud-bottom { display: flex; justify-content: space-between; align-items: flex-end; padding: 40px; display: none; width: 100%; box-sizing: border-box; }
+
+        /* Speedometer */
+        .speed-container { text-align: right; text-shadow: 0 0 10px #00ffff; }
+        .speed-value { font-size: 5rem; font-weight: 900; color: #fff; font-style: italic; line-height: 1;}
+        .speed-unit { font-size: 1.5rem; color: #00ffff; font-weight: 700; letter-spacing: 2px;}
+
+        /* Score/Distance */
+        .score-container { text-align: left; text-shadow: 0 0 10px #ff00ff; }
+        .score-label { font-size: 1rem; color: #ff00ff; letter-spacing: 2px; }
+        .score-value { font-size: 2.5rem; font-weight: 900; color: #fff; }
+
+        /* Turbo Bar */
+        .turbo-container { width: 300px; display: flex; flex-direction: column; gap: 5px; }
+        .turbo-label { color: #ff00ff; font-weight: 900; letter-spacing: 3px; font-size: 1.2rem; text-shadow: 0 0 10px #ff00ff; font-style: italic;}
+        .turbo-bg { width: 100%; height: 20px; background: rgba(0,0,0,0.8); border: 2px solid #ff00ff; transform: skewX(-15deg); overflow: hidden; box-shadow: 0 0 15px rgba(255,0,255,0.5); }
+        .turbo-fill { height: 100%; width: 0%; background: #ff00ff; box-shadow: 0 0 20px #ff00ff; transition: width 0.1s linear; }
+        .turbo-ready .turbo-fill { background: #fff; box-shadow: 0 0 20px #fff; animation: pulse 0.5s infinite alternate; }
+
+        @keyframes pulse {
+            from { opacity: 0.8; }
+            to { opacity: 1; box-shadow: 0 0 40px #fff; }
+        }
+
+        .controls-hint { color: rgba(0, 255, 255, 0.7); font-size: 1rem; line-height: 1.8; text-align: right; }
+        .key { display: inline-block; padding: 2px 8px; border: 1px solid #00ffff; border-radius: 4px; color: #fff; background: rgba(0,255,255,0.2); }
+
+        #fxOverlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(transparent 50%, rgba(0, 255, 255, 0.05) 50%);
+            background-size: 100% 4px; pointer-events: none; opacity: 0.3; z-index: 5;
+        }
+
+        #speedOverlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            box-shadow: inset 0 0 100px rgba(255,0,255,0); transition: box-shadow 0.2s;
+            pointer-events: none; z-index: 4;
+        }
+        .turbo-active #speedOverlay { box-shadow: inset 0 0 150px rgba(255,0,255,0.6); }
+
+        /* Mobile Controls */
+        #mobileControls {
+            position: absolute; bottom: 30px; left: 0; width: 100%; height: 200px;
+            display: none; justify-content: space-between; align-items: flex-end;
+            padding: 0 20px; box-sizing: border-box; pointer-events: none; z-index: 20;
+        }
+        @media (max-width: 1024px) { #mobileControls { display: flex; } .controls-hint { display: none; } }
+        
+        .touch-btn {
+            width: 80px; height: 80px; background: rgba(0,255,255,0.1); border: 2px solid #00ffff;
+            color: #fff; display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem; pointer-events: auto; user-select: none; touch-action: none;
+            box-shadow: 0 0 10px #00ffff; backdrop-filter: blur(5px);
+            clip-path: polygon(20% 0, 100% 0, 80% 100%, 0% 100%);
+        }
+        .touch-btn:active { background: #00ffff; color: #000; box-shadow: 0 0 30px #00ffff; }
+        
+        .btn-magenta { border-color: #ff00ff; box-shadow: 0 0 10px #ff00ff; background: rgba(255,0,255,0.1); }
+        .btn-magenta:active { background: #ff00ff; box-shadow: 0 0 30px #ff00ff; }
+        
+        .steering-cluster { display: flex; gap: 15px; }
+        .action-cluster { display: flex; flex-direction: column; gap: 15px; align-items: flex-end; }
+        
+        .btn-turbo { height: 60px; width: 120px; font-size: 1rem; font-weight: 900; font-style: italic; }
+
+    </style>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <div id="fxOverlay"></div>
+    <div id="speedOverlay"></div>
+    
+    <div id="uiLayer">
+        <div id="startScreen">
+            <h1>NEON DRIFT</h1>
+            <p>CARRERAS CYBERPUNK A TODA VELOCIDAD</p>
+            <div style="margin-bottom: 20px; text-align: center; color: #aaa; font-size: 0.9rem;">
+                <span class="key">A</span> / <span class="key">D</span> o <span class="key">FLECHAS</span> para Girar<br><br>
+                Mantén <span class="key">ESPACIO</span> para DERRAPAR y cargar Turbo<br><br>
+                Mantén <span class="key">SHIFT</span> para usar el TURBO BOOST
+            </div>
+            <div id="recordDisplay" style="margin-bottom: 20px; color: #ffca28; font-weight: bold;">RÉCORD: 0m</div>
+            <button class="start-btn" id="startBtn">INICIAR</button>
+            <div id="loadingText" style="margin-top: 20px; color: #00ffff; display:none;">Iniciando Sistema...</div>
+        </div>
+
+        <div id="gameOverScreen" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,0,0,0.2); backdrop-filter: blur(10px); display: none; flex-direction: column; align-items: center; justify-content: center; color: #fff; pointer-events: auto; z-index: 15;">
+            <h1 style="font-size: 5rem; color: #ff3333; text-shadow: 0 0 20px #ff0000; margin: 0;">¡CHOQUE!</h1>
+            <p id="finalScoreDisplay" style="font-size: 1.5rem; margin-top: 10px;">Distancia: 0m</p>
+            <p id="newRecordText" style="color: #ffca28; font-weight: bold; display: none;">¡NUEVO RÉCORD!</p>
+            <button class="start-btn" id="restartBtn" style="margin-top: 30px; background: #ff3333; box-shadow: 0 0 20px #ff3333;">REINTENTAR</button>
+        </div>
+        
+        <div class="hud hud-top" id="topHud">
+            <div class="score-container">
+                <div class="score-label">DISTANCIA</div>
+                <div class="score-value" id="distanceDisplay">0m</div>
+            </div>
+            <div style="text-align: center; text-shadow: 0 0 10px #ffca28;">
+                <div class="score-label" style="color: #ffca28;">RÉCORD</div>
+                <div class="score-value" style="color: #ffca28; font-size: 1.5rem;" id="hudRecordDisplay">0m</div>
+            </div>
+            <div class="speed-container">
+                <div class="speed-value" id="speedDisplay">0</div>
+                <div class="speed-unit">KM/H</div>
+            </div>
+        </div>
+        
+        <div class="hud-bottom" id="bottomHud">
+            <div class="turbo-container" id="turboContainer">
+                <div class="turbo-label">TURBO</div>
+                <div class="turbo-bg"><div class="turbo-fill" id="turboFill"></div></div>
+            </div>
+            <div class="controls-hint">
+                <span class="key">SPACE</span> DRIFT <br>
+                <span class="key">SHIFT</span> BOOST
+            </div>
+        </div>
+        <div id="mobileControls">
+            <div class="steering-cluster">
+                <div class="touch-btn" id="btnLeft">◀</div>
+                <div class="touch-btn" id="btnRight">▶</div>
+            </div>
+            <div class="action-cluster">
+                <div class="touch-btn btn-magenta btn-turbo" id="btnTurbo">TURBO</div>
+                <div class="touch-btn btn-magenta" id="btnDrift">DERRAPE</div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        // --- GAME CONSTANTS & STATE ---
+        let isPlaying = false;
+        let isGameOver = false;
+        let highScore = parseInt(localStorage.getItem('neonDriftHighScore')) || 0;
+        
+        const CAR_MAX_SPEED = 250;
+        const CAR_TURBO_SPEED = 450;
+        const CAR_ACCEL = 100;
+        const CAR_DECEL = 50;
+        const STEER_SPEED = 40;
+        const TRACK_WIDTH = 40;
+        const TRACK_LENGTH = 200;
+        const NUM_SEGMENTS = 10;
+        
+        let speed = 0;
+        let distance = 0;
+        let turboEnergy = 0;
+        const MAX_TURBO = 100;
+        let isDrifting = false;
+        let isTurbo = false;
+        let driftDirection = 0; // -1 left, 1 right
+
+        // --- UI ELEMENTS ---
+        const startScreen = document.getElementById('startScreen');
+        const startBtn = document.getElementById('startBtn');
+        const topHud = document.getElementById('topHud');
+        const bottomHud = document.getElementById('bottomHud');
+        const speedDisplay = document.getElementById('speedDisplay');
+        const distanceDisplay = document.getElementById('distanceDisplay');
+        const turboFill = document.getElementById('turboFill');
+        const turboContainer = document.getElementById('turboContainer');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const restartBtn = document.getElementById('restartBtn');
+        const finalScoreDisplay = document.getElementById('finalScoreDisplay');
+        const newRecordText = document.getElementById('newRecordText');
+        const recordDisplay = document.getElementById('recordDisplay');
+        const hudRecordDisplay = document.getElementById('hudRecordDisplay');
+
+        // Update record displays
+        recordDisplay.innerText = `RÉCORD: ${highScore}m`;
+        hudRecordDisplay.innerText = `${highScore}m`;
+
+        // --- THREE.JS SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x020005);
+        scene.fog = new THREE.FogExp2(0x020005, 0.005); // Thick purple/black fog
+
+        const camera = new THREE.PerspectiveCamera(85, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
+
+        // --- POST PROCESSING (CYBERPUNK BLOOM) ---
+        const renderScene = new RenderPass(scene, camera);
+        const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.5, 0.2);
+        bloomPass.threshold = 0.1;
+        bloomPass.strength = 2.5; // Extreme neon glow
+        bloomPass.radius = 0.8;
+
+        const composer = new EffectComposer(renderer);
+        composer.addPass(renderScene);
+        composer.addPass(bloomPass);
+
+        // --- LIGHTING ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+        scene.add(ambientLight);
+        
+        // --- CAR SETUP ---
+        const carGroup = new THREE.Group();
+        scene.add(carGroup);
+
+        // Car Body (Stylized Wedge)
+        const carGeo = new THREE.ConeGeometry(1.5, 5, 4);
+        carGeo.rotateX(Math.PI / 2);
+        carGeo.rotateY(Math.PI / 4); // Make it look like a stealth fighter
+        const carMat = new THREE.MeshBasicMaterial({ color: 0x111111 }); // Pitch black body
+        const carMesh = new THREE.Mesh(carGeo, carMat);
+        carMesh.scale.set(1, 0.3, 1);
+        carGroup.add(carMesh);
+
+        // Neon Edges for Car
+        const edges = new THREE.EdgesGeometry(carGeo);
+        const edgeMat = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 });
+        const carEdges = new THREE.LineSegments(edges, edgeMat);
+        carEdges.scale.set(1, 0.3, 1);
+        carGroup.add(carEdges);
+
+        // Engine Thruster Glow
+        const engineLight = new THREE.PointLight(0xff00ff, 5, 20);
+        engineLight.position.set(0, 0, 2);
+        carGroup.add(engineLight);
+
+        // --- CAMERA RIG ---
+        const cameraRig = new THREE.Group();
+        scene.add(cameraRig);
+        cameraRig.add(camera);
+        // Base camera offset
+        camera.position.set(0, 2, 4);
+        camera.lookAt(0, 0, -20);
+
+        // --- PROCEDURAL TRACK GENERATION ---
+        const trackGroup = new THREE.Group();
+        scene.add(trackGroup);
+
+        // Grid Material for Floor
+        const gridHelper = new THREE.GridHelper(TRACK_WIDTH * 2, 40, 0xff00ff, 0x440044);
+        gridHelper.position.y = -0.1;
+        
+        const segments = [];
+        const obstacles = [];
+
+        function createTrackSegment(index) {
+            const segment = new THREE.Group();
+            segment.position.z = -index * TRACK_LENGTH;
+
+            // Ground Plane
+            const planeGeo = new THREE.PlaneGeometry(TRACK_WIDTH, TRACK_LENGTH);
+            const planeMat = new THREE.MeshBasicMaterial({ color: 0x050010 });
+            const plane = new THREE.Mesh(planeGeo, planeMat);
+            plane.rotation.x = -Math.PI / 2;
+            segment.add(plane);
+
+            // Left/Right Neon Borders
+            const borderGeo = new THREE.BoxGeometry(1, 1, TRACK_LENGTH);
+            const borderMatC = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+            const borderMatM = new THREE.MeshBasicMaterial({ color: 0xff00ff });
+            
+            const borderL = new THREE.Mesh(borderGeo, index % 2 === 0 ? borderMatC : borderMatM);
+            borderL.position.set(-TRACK_WIDTH/2, 0.5, 0);
+            segment.add(borderL);
+
+            const borderR = new THREE.Mesh(borderGeo, index % 2 === 0 ? borderMatM : borderMatC);
+            borderR.position.set(TRACK_WIDTH/2, 0.5, 0);
+            segment.add(borderR);
+
+            // Spawn Obstacles (Neon Pillars)
+            if (index > 2) { // Give player a head start
+                const numObs = Math.floor(Math.random() * 3);
+                for(let i=0; i<numObs; i++) {
+                    const obsGeo = new THREE.BoxGeometry(4, 10, 2);
+                    const obsMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                    const obs = new THREE.Mesh(obsGeo, obsMat);
+                    obs.position.set((Math.random() - 0.5) * (TRACK_WIDTH - 6), 5, (Math.random() - 0.5) * TRACK_LENGTH);
+                    segment.add(obs);
+                    
+                    // Add to collision list
+                    obstacles.push({
+                        mesh: obs,
+                        worldZ: segment.position.z + obs.position.z,
+                        x: obs.position.x
+                    });
+                }
+            }
+
+            // Neon Arches
+            if(index % 2 === 0) {
+                const archGeo = new THREE.TorusGeometry(TRACK_WIDTH/2 + 2, 0.5, 4, 30, Math.PI);
+                const archMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+                const arch = new THREE.Mesh(archGeo, archMat);
+                arch.rotation.z = Math.PI;
+                arch.position.y = 0;
+                segment.add(arch);
+            }
+
+            trackGroup.add(segment);
+            return segment;
+        }
+
+        for (let i = 0; i < NUM_SEGMENTS; i++) {
+            segments.push(createTrackSegment(i));
+        }
+
+        // Add Grid attached to car
+        const globalGrid = new THREE.GridHelper(1000, 100, 0xff00ff, 0x220044);
+        globalGrid.position.y = -0.5;
+        scene.add(globalGrid);
+
+        // --- SPEED LINES VFX ---
+        const linesGeo = new THREE.BufferGeometry();
+        const linesCount = 200;
+        const posArray = new Float32Array(linesCount * 3);
+        for(let i=0; i<linesCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 100;
+        }
+        linesGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const linesMat = new THREE.PointsMaterial({ size: 0.5, color: 0x00ffff, transparent: true, opacity: 0.8 });
+        const speedLines = new THREE.Points(linesGeo, linesMat);
+        scene.add(speedLines);
+
+        // --- DRIFT TRAILS VFX ---
+        const trails = [];
+        const trailMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+
+        function createTrailSlice() {
+            if(!isDrifting) return;
+            const geo = new THREE.PlaneGeometry(2, speed * 0.02);
+            geo.rotateX(-Math.PI/2);
+            const mesh = new THREE.Mesh(geo, trailMat);
+            
+            // Left wheel
+            mesh.position.set(carGroup.position.x - 1, 0.1, carGroup.position.z);
+            mesh.rotation.y = carGroup.rotation.y;
+            scene.add(mesh);
+            trails.push({ mesh, life: 1 });
+
+            // Right wheel
+            const mesh2 = mesh.clone();
+            mesh2.position.set(carGroup.position.x + 1, 0.1, carGroup.position.z);
+            scene.add(mesh2);
+            trails.push({ mesh: mesh2, life: 1 });
+        }
+
+
+        // --- INPUT STATE ---
+        const keys = { ArrowLeft: false, ArrowRight: false, a: false, d: false, Space: false, Shift: false };
+
+        // --- MOBILE INPUTS ---
+        const setupTouchBtn = (id, keyName) => {
+            const btn = document.getElementById(id);
+            const handleTouch = (e) => {
+                e.preventDefault();
+                keys[keyName] = true;
+            };
+            const handleEnd = (e) => {
+                e.preventDefault();
+                keys[keyName] = false;
+            };
+            btn.addEventListener('touchstart', handleTouch);
+            btn.addEventListener('touchend', handleEnd);
+            btn.addEventListener('mousedown', handleTouch);
+            btn.addEventListener('mouseup', handleEnd);
+            btn.addEventListener('mouseleave', handleEnd);
+        };
+
+        setupTouchBtn('btnLeft', 'ArrowLeft');
+        setupTouchBtn('btnRight', 'ArrowRight');
+        setupTouchBtn('btnDrift', 'Space');
+        setupTouchBtn('btnTurbo', 'Shift');
+
+        document.addEventListener('keydown', (e) => {
+            if(keys.hasOwnProperty(e.code)) keys[e.code] = true;
+            if(keys.hasOwnProperty(e.key)) keys[e.key] = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if(keys.hasOwnProperty(e.code)) keys[e.code] = false;
+            if(keys.hasOwnProperty(e.key)) keys[e.key] = false;
+        });
+
+        // --- START GAME ---
+        startBtn.addEventListener('click', () => {
+            isPlaying = true;
+            startScreen.style.display = 'none';
+            topHud.style.display = 'flex';
+            bottomHud.style.display = 'flex';
+        });
+
+        restartBtn.addEventListener('click', () => {
+            resetGame();
+        });
+
+        function resetGame() {
+            isGameOver = false;
+            isPlaying = true;
+            speed = 0;
+            distance = 0;
+            turboEnergy = 0;
+            carGroup.position.set(0, 0, 0);
+            carGroup.visible = true;
+            cameraRig.position.set(0, 0, 0);
+            gameOverScreen.style.display = 'none';
+            
+            // Clear trails
+            trails.forEach(t => scene.remove(t.mesh));
+            trails.length = 0;
+            
+            // Reposition track segments to start
+            segments.forEach((segment, i) => {
+                segment.position.z = -i * TRACK_LENGTH;
+            });
+        }
+
+        function triggerGameOver() {
+            isGameOver = true;
+            isPlaying = false;
+            carGroup.visible = false; // Hide car
+            
+            // Explosion effect - shake camera hard
+            shakeIntensity = 5;
+            
+            // Update High Score
+            const finalDist = Math.floor(distance);
+            if(finalDist > highScore) {
+                highScore = finalDist;
+                localStorage.setItem('neonDriftHighScore', highScore);
+                newRecordText.style.display = 'block';
+                recordDisplay.innerText = `RÉCORD: ${highScore}m`;
+                hudRecordDisplay.innerText = `${highScore}m`;
+            } else {
+                newRecordText.style.display = 'none';
+            }
+            
+            finalScoreDisplay.innerText = `Distancia: ${finalDist}m`;
+            gameOverScreen.style.display = 'flex';
+        }
+
+        let shakeIntensity = 0;
+
+        function checkCollisions() {
+            for(let i=0; i<obstacles.length; i++) {
+                const obs = obstacles[i];
+                if(Math.abs(carGroup.position.z - obs.worldZ) < 2) {
+                    if(Math.abs(carGroup.position.x - obs.x) < 3) {
+                        triggerGameOver();
+                    }
+                }
+            }
+        }
+
+        // --- MAIN LOOP ---
+        let lastTime = performance.now();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const time = performance.now();
+            const delta = Math.min((time - lastTime) / 1000, 0.1);
+            lastTime = time;
+            
+            if (isPlaying && !isGameOver) {
+                // Input processing
+                const left = keys.ArrowLeft || keys.a;
+                const right = keys.ArrowRight || keys.d;
+                const space = keys.Space;
+                const shift = keys.ShiftLeft || keys.ShiftRight;
+
+                // Turbo Logic
+                isTurbo = shift && turboEnergy > 0;
+                if(isTurbo) {
+                    turboEnergy -= 30 * delta;
+                    if(turboEnergy < 0) turboEnergy = 0;
+                    document.body.classList.add('turbo-active');
+                } else {
+                    document.body.classList.remove('turbo-active');
+                }
+
+                // Acceleration
+                const targetMaxSpeed = isTurbo ? CAR_TURBO_SPEED : CAR_MAX_SPEED;
+                if (speed < targetMaxSpeed) {
+                    speed += CAR_ACCEL * delta * (isTurbo ? 3 : 1);
+                } else {
+                    speed -= CAR_DECEL * delta;
+                }
+
+                // Steering & Drifting
+                isDrifting = space && speed > 50 && (left || right);
+                
+                let currentSteerSpeed = STEER_SPEED * (speed / CAR_MAX_SPEED);
+                if(isDrifting) {
+                    currentSteerSpeed *= 1.5; // Tighter turning when drifting
+                    turboEnergy += 15 * delta; // Charge turbo
+                    if(turboEnergy > MAX_TURBO) turboEnergy = MAX_TURBO;
+                    
+                    // Spawn trails
+                    if(Math.random() > 0.5) createTrailSlice();
+                    
+                    // Calculate drift direction
+                    if(left) driftDirection = -1;
+                    if(right) driftDirection = 1;
+                }
+
+                if (left) carGroup.position.x -= currentSteerSpeed * delta;
+                if (right) carGroup.position.x += currentSteerSpeed * delta;
+
+                // Wall bounds
+                const limit = TRACK_WIDTH / 2 - 2;
+                if (carGroup.position.x > limit) carGroup.position.x = limit;
+                if (carGroup.position.x < -limit) carGroup.position.x = -limit;
+
+                // Forward Movement
+                carGroup.position.z -= speed * delta;
+                distance += (speed * delta) / 10;
+
+                // Car Visuals (Tilt and Yaw)
+                const targetRotationZ = left ? 0.3 : (right ? -0.3 : 0);
+                let targetRotationY = 0;
+                
+                if(isDrifting) {
+                    targetRotationY = driftDirection * 0.5; // Slide sideways
+                    edgeMat.color.setHex(0xff00ff); // Magenta while drifting
+                    engineLight.color.setHex(0x00ffff);
+                } else {
+                    edgeMat.color.setHex(0x00ffff); // Cyan normal
+                    engineLight.color.setHex(0xff00ff);
+                }
+
+                carGroup.rotation.z += (targetRotationZ - carGroup.rotation.z) * 10 * delta;
+                carGroup.rotation.y += (targetRotationY - carGroup.rotation.y) * 8 * delta;
+
+                // Camera Follow with Spring
+                const targetCamZ = carGroup.position.z + (isTurbo ? 6 : 3.5);
+                const targetCamX = carGroup.position.x * 0.5;
+                const targetFov = isTurbo ? 110 : (80 + (speed / CAR_MAX_SPEED) * 15);
+
+                cameraRig.position.z += (targetCamZ - cameraRig.position.z) * 5 * delta;
+                cameraRig.position.x += (targetCamX - cameraRig.position.x) * 5 * delta;
+                camera.fov += (targetFov - camera.fov) * 5 * delta;
+                camera.updateProjectionMatrix();
+
+                // Dynamic Engine Light
+                engineLight.intensity = (speed / CAR_MAX_SPEED) * 10 + (isTurbo ? 20 : 0);
+
+                // Update Speed Lines
+                speedLines.position.copy(cameraRig.position);
+                speedLines.position.z -= 20;
+                const positions = speedLines.geometry.attributes.position.array;
+                for(let i=2; i<positions.length; i+=3) {
+                    positions[i] += speed * delta * 2;
+                    if(positions[i] > 50) positions[i] = -150;
+                }
+                speedLines.geometry.attributes.position.needsUpdate = true;
+
+                // Update Grid Position
+                globalGrid.position.z = cameraRig.position.z - (cameraRig.position.z % 10);
+
+                // Check Collisions
+                checkCollisions();
+
+                // Track Repositioning (Infinite Loop)
+                segments.forEach(segment => {
+                    if (cameraRig.position.z < segment.position.z - TRACK_LENGTH) {
+                        segment.position.z -= TRACK_LENGTH * NUM_SEGMENTS;
+                        
+                        // Update obstacle world positions within this segment
+                        segment.children.forEach(child => {
+                            if(child.geometry.type === 'BoxGeometry' && child.position.y === 5) {
+                                // Find in obstacles array
+                                const obsObj = obstacles.find(o => o.mesh === child);
+                                if(obsObj) {
+                                    // Randomize X again for replayability
+                                    obsObj.x = (Math.random() - 0.5) * (TRACK_WIDTH - 6);
+                                    child.position.x = obsObj.x;
+                                    obsObj.worldZ = segment.position.z + child.position.z;
+                                }
+                            }
+                        });
+                    }
+                });
+
+                // Update Trails
+                for(let i=trails.length-1; i>=0; i--) {
+                    const t = trails[i];
+                    t.life -= delta * 2;
+                    t.mesh.material.opacity = t.life * 0.5;
+                    if(t.life <= 0) {
+                        scene.remove(t.mesh);
+                        trails.splice(i, 1);
+                    }
+                }
+
+                // Update UI
+                speedDisplay.innerText = Math.floor(speed);
+                distanceDisplay.innerText = Math.floor(distance) + 'm';
+                turboFill.style.width = turboEnergy + '%';
+                
+                if(turboEnergy >= MAX_TURBO) {
+                    turboContainer.classList.add('turbo-ready');
+                } else {
+                    turboContainer.classList.remove('turbo-ready');
+                }
+            } else if (isGameOver) {
+                // Intense screen shake decay for explosion
+                if(shakeIntensity > 0) {
+                    camera.position.x += (Math.random() - 0.5) * shakeIntensity;
+                    camera.position.y += (Math.random() - 0.5) * shakeIntensity;
+                    shakeIntensity *= 0.9;
+                }
+            }
+            
+            composer.render();
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Error handling
+        window.addEventListener('error', function(e) {
+            console.error("Engine error: ", e);
+            document.getElementById('loadingText').innerText = "Critical Engine Failure. Check console.";
+            document.getElementById('loadingText').style.color = "red";
+            document.getElementById('loadingText').style.display = 'block';
+        });
+
+        animate();
+    </script>
+</body>
+</html>
